@@ -51,6 +51,8 @@
   .stat .v{font-size:1.8rem;font-weight:800}
   .stat .k{color:var(--muted);font-size:.85rem;font-weight:600}
   .stat.acc .v{color:var(--accent-2)} .stat.warn .v{color:var(--warn)} .stat.ok .v{color:var(--ok)}
+  .forecast-chart{display:block;width:100%;height:280px}
+  .forecast-message{color:var(--muted);font-size:.85rem;margin-top:8px}
 
   .toolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin-bottom:18px}
   .toolbar .field{margin:0;min-width:150px}
@@ -110,6 +112,13 @@
       <div class="stats" id="stats"></div>
 
       <div class="card">
+        <h2><i class="fa-solid fa-chart-line"></i> Demanda histórica</h2>
+        <p class="forecast-message">Citas no canceladas por día durante los últimos 30 días.</p>
+        <canvas id="forecastChart" class="forecast-chart" role="img" aria-label="Gráfico de demanda histórica de citas"></canvas>
+        <div id="forecastMessage" class="forecast-message" role="status" aria-live="polite">Cargando histórico…</div>
+      </div>
+
+      <div class="card">
         <h2><i class="fa-solid fa-list-check"></i> Reservas</h2>
         <div class="toolbar">
           <div class="field"><label for="fDate">Fecha</label><input type="date" id="fDate" /></div>
@@ -152,7 +161,7 @@
 
 <script>
   /* ====== CONFIG ====== */
-  const DEFAULT_API = "https://citafacil-api.onrender.com";
+  const DEFAULT_API = "http://127.0.0.1:8000";
   const qp = new URLSearchParams(location.search).get("api");
   if (qp) localStorage.setItem("citafacil_api", qp);
   const API = (localStorage.getItem("citafacil_api") || DEFAULT_API).replace(/\/$/, "");
@@ -165,7 +174,7 @@
 
   async function api(path, opts){
     opts = opts || {};
-    opts.headers = Object.assign({"X-Admin-Token": TOKEN}, opts.headers||{});
+    opts.headers = Object.assign(TOKEN ? {"X-Admin-Token": TOKEN} : {}, opts.headers||{});
     const r = await fetch(API + path, opts);
     if(r.status===401 || r.status===422 && path.startsWith("/api/admin")){ /* handled by caller */ }
     if(!r.ok){ let d; try{d=await r.json()}catch(e){}; const err=new Error((d&&d.detail)||("Error "+r.status)); err.status=r.status; throw err; }
@@ -200,7 +209,7 @@
   }
 
   /* ====== DATA ====== */
-  async function refreshAll(){ await Promise.all([loadStats(), loadAppointments(), loadServices()]); }
+  async function refreshAll(){ await Promise.all([loadStats(), loadAppointments(), loadServices(), loadForecast()]); }
 
   async function loadStats(){
     try{
@@ -212,6 +221,117 @@
         <div class="stat ok"><div class="v">${s.upcoming}</div><div class="k">Próximas</div></div>`;
     }catch(e){ if(e.status===401) logout(); }
   }
+
+  let forecastPoints = [];
+
+  function drawForecast(){
+    const canvas = $("forecastChart");
+    const bounds = canvas.getBoundingClientRect();
+    if(!bounds.width || !bounds.height) return;
+
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = Math.round(bounds.width * ratio);
+    canvas.height = Math.round(bounds.height * ratio);
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+    const width = bounds.width, height = bounds.height;
+    const pad = {top:14, right:14, bottom:36, left:42};
+    const plotWidth = width - pad.left - pad.right;
+    const plotHeight = height - pad.top - pad.bottom;
+    const maxCount = Math.max(0, ...forecastPoints.map(point => point.count));
+    const step = maxCount <= 4 ? 1 : Math.ceil(maxCount / 4);
+    const maxValue = Math.max(step, Math.ceil(maxCount / step) * step);
+
+    ctx.clearRect(0, 0, width, height);
+    ctx.font = "12px 'JetBrains Mono', monospace";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    for(let value=0; value<=maxValue; value+=step){
+      const y = pad.top + plotHeight - value / maxValue * plotHeight;
+      ctx.strokeStyle = "#232a34";
+      ctx.beginPath();
+      ctx.moveTo(pad.left, y);
+      ctx.lineTo(width - pad.right, y);
+      ctx.stroke();
+      ctx.fillStyle = "#9aa7b4";
+      ctx.fillText(String(value), pad.left - 8, y);
+    }
+
+    if(!forecastPoints.length) return;
+
+    const xFor = index => pad.left + (forecastPoints.length === 1
+      ? plotWidth / 2
+      : index / (forecastPoints.length - 1) * plotWidth);
+    const yFor = count => pad.top + plotHeight - count / maxValue * plotHeight;
+
+    ctx.strokeStyle = "#22d3ee";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    forecastPoints.forEach((point, index) => {
+      const x = xFor(index), y = yFor(point.count);
+      if(index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    ctx.fillStyle = "#22d3ee";
+    forecastPoints.forEach((point, index) => {
+      ctx.beginPath();
+      ctx.arc(xFor(index), yFor(point.count), 3, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    const labelCount = Math.min(6, forecastPoints.length);
+    ctx.fillStyle = "#9aa7b4";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    for(let index=0; index<labelCount; index++){
+      const pointIndex = Math.round(index * (forecastPoints.length - 1) / Math.max(1, labelCount - 1));
+      const pointDate = new Date(forecastPoints[pointIndex].date + "T00:00:00");
+      const label = pointDate.toLocaleDateString("es-CL", {day:"2-digit", month:"2-digit"});
+      ctx.fillText(label, xFor(pointIndex), height - pad.bottom + 10);
+    }
+  }
+
+  async function loadForecast(){
+    const message = $("forecastMessage");
+    message.textContent = "Cargando histórico…";
+    const end = new Date();
+    end.setHours(0, 0, 0, 0);
+    const start = new Date(end);
+    start.setDate(start.getDate() - 29);
+    const toDateString = day => {
+      const year = day.getFullYear();
+      const month = String(day.getMonth() + 1).padStart(2, "0");
+      const date = String(day.getDate()).padStart(2, "0");
+      return `${year}-${month}-${date}`;
+    };
+    const params = new URLSearchParams({
+      start_date: toDateString(start),
+      end_date: toDateString(end),
+      granularity: "day"
+    });
+
+    try{
+      const data = await api("/api/admin/forecast?" + params.toString());
+      if(!Array.isArray(data) || data.some(point =>
+        !point || typeof point.date !== "string" || !Number.isFinite(Number(point.count))
+      )){
+        throw new Error("La API devolvió datos de demanda inválidos.");
+      }
+      forecastPoints = data.map(point => ({date:point.date, count:Number(point.count)}));
+      drawForecast();
+      message.textContent = `${forecastPoints.reduce((total, point) => total + point.count, 0)} citas registradas en el período.`;
+    }catch(e){
+      if(e.status === 401){ logout(); return; }
+      forecastPoints = [];
+      drawForecast();
+      message.textContent = "No se pudo cargar el gráfico: " + e.message;
+    }
+  }
+
+  window.addEventListener("resize", drawForecast);
 
   const STLABEL = {pending:"Pendiente",confirmed:"Confirmada",cancelled:"Cancelada",done:"Realizada"};
   function fmtDT(iso){ const d=new Date(iso); return d.toLocaleDateString("es-CL",{weekday:"short",day:"2-digit",month:"2-digit"})+" · "+d.toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"}); }

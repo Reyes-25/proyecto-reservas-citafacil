@@ -57,6 +57,25 @@ def all_appointments(
     return crud.list_appointments(db, status=status, day=day)
 
 
+@router.get(
+    "/forecast",
+    response_model=list[schemas.AppointmentHistoryPoint],
+    summary="Historial de citas agrupado por período",
+)
+def get_forecast(
+    start_date: date = Query(..., description="Inicio del rango (YYYY-MM-DD)"),
+    end_date: date = Query(..., description="Fin del rango (YYYY-MM-DD)"),
+    granularity: str = Query("day", pattern="^(day|week|month)$"),
+    db: Session = Depends(get_db),
+):
+    if end_date < start_date:
+        raise HTTPException(
+            status_code=422,
+            detail="end_date debe ser igual o posterior a start_date.",
+        )
+    return crud.get_appointment_history(db, start_date, end_date, granularity)
+
+
 @router.patch("/appointments/{appt_id}", response_model=schemas.AppointmentOut, summary="Cambiar estado")
 def change_status(appt_id: int, payload: schemas.AppointmentStatusUpdate, db: Session = Depends(get_db)):
     appt = crud.get_appointment(db, appt_id)

@@ -1,7 +1,7 @@
 """Esquemas Pydantic (validación de entrada/salida de la API)."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -100,6 +100,11 @@ class StatsOut(BaseModel):
     cancelled: int
     done: int
     upcoming: int
+
+
+class AppointmentHistoryPoint(BaseModel):
+    date: date
+    count: int
 
 
 class MessageOut(BaseModel):
