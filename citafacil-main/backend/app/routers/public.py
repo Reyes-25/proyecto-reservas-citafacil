@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from .. import crud, schemas
-from ..availability import generate_slots, is_slot_free
+from ..availability import generate_slots, get_calendar_availability, is_slot_free
 from ..config import settings
 from ..database import get_db
 from ..notifications import confirmation_message, send_whatsapp
@@ -43,6 +43,25 @@ def get_availability(
     if not service or not service.active:
         raise HTTPException(status_code=404, detail="Servicio no encontrado.")
     return generate_slots(db, service, day)
+
+
+@router.get(
+    "/calendar",
+    response_model=dict[str, str],
+    summary="Disponibilidad por día en un rango",
+)
+def get_calendar(
+    service_id: int = Query(..., description="ID del servicio"),
+    start_date: date = Query(..., description="Inicio del rango (YYYY-MM-DD)"),
+    end_date: date = Query(..., description="Fin del rango (YYYY-MM-DD)"),
+    db: Session = Depends(get_db),
+):
+    try:
+        return get_calendar_availability(db, service_id, start_date, end_date)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
 
 
 @router.post(
