@@ -55,6 +55,35 @@ def generate_slots(db: Session, service: models.Service, day: date) -> list[str]
     return slots
 
 
+def get_calendar_availability(
+    db: Session, service_id: int, start_date: date, end_date: date
+) -> dict[str, str]:
+    """Estado de disponibilidad por fecha, con ambos extremos del rango incluidos."""
+    service = (
+        db.query(models.Service)
+        .filter(models.Service.id == service_id, models.Service.active.is_(True))
+        .first()
+    )
+    if not service:
+        raise LookupError("Servicio no encontrado.")
+    if end_date < start_date:
+        raise ValueError("end_date debe ser igual o posterior a start_date.")
+
+    availability: dict[str, str] = {}
+    day = start_date
+    while day <= end_date:
+        if day.weekday() in settings.closed_weekdays_set:
+            status = "closed"
+        elif generate_slots(db, service, day):
+            status = "available"
+        else:
+            status = "occupied"
+        availability[day.isoformat()] = status
+        day += timedelta(days=1)
+
+    return availability
+
+
 def is_slot_free(db: Session, service: models.Service, start_at: datetime) -> bool:
     """Valida que un inicio concreto esté dentro de horario y libre."""
     if start_at.weekday() in settings.closed_weekdays_set:
