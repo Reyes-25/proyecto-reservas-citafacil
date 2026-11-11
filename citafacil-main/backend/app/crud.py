@@ -75,6 +75,54 @@ def list_appointments(
     return q.order_by(models.Appointment.start_at).all()
 
 
+def get_appointment_history(
+    db: Session, start_date: date, end_date: date, granularity: str = "day"
+) -> list[dict[str, date | int]]:
+    """Cuenta citas no canceladas agrupadas por día, semana o mes."""
+    if end_date < start_date:
+        raise ValueError("end_date debe ser igual o posterior a start_date.")
+    if granularity not in {"day", "week", "month"}:
+        raise ValueError("granularity debe ser 'day', 'week' o 'month'.")
+
+    def period_start(day: date) -> date:
+        if granularity == "week":
+            return day - timedelta(days=day.weekday())
+        if granularity == "month":
+            return day.replace(day=1)
+        return day
+
+    first_period = period_start(start_date)
+    last_period = period_start(end_date)
+    counts: dict[date, int] = {}
+    period = first_period
+    while period <= last_period:
+        counts[period] = 0
+        if granularity == "week":
+            period += timedelta(days=7)
+        elif granularity == "month":
+            period = (
+                period.replace(year=period.year + 1, month=1)
+                if period.month == 12
+                else period.replace(month=period.month + 1)
+            )
+        else:
+            period += timedelta(days=1)
+
+    appointments = (
+        db.query(models.Appointment.start_at)
+        .filter(
+            models.Appointment.status != models.STATUS_CANCELLED,
+            models.Appointment.start_at >= datetime.combine(start_date, time.min),
+            models.Appointment.start_at <= datetime.combine(end_date, time.max),
+        )
+        .all()
+    )
+    for (start_at,) in appointments:
+        counts[period_start(start_at.date())] += 1
+
+    return [{"date": period, "count": count} for period, count in counts.items()]
+
+
 def get_appointment(db: Session, appt_id: int) -> Optional[models.Appointment]:
     return db.query(models.Appointment).filter(models.Appointment.id == appt_id).first()
 
