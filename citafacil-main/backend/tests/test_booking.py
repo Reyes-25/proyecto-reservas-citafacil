@@ -114,3 +114,111 @@ def test_admin_auth():
     assert client.get(
         "/api/admin/appointments", headers={"X-Admin-Token": "test-token"}
     ).status_code == 200  # correcto
+
+
+# ---------- Calendario ----------
+def test_calendar_returns_daily_states():
+    sid = client.get("/api/services").json()[0]["id"]
+    day = _next_open_day_at(11).date()
+    prev_day = day - timedelta(days=1)
+    next_day = day + timedelta(days=1)
+
+    r = client.get(
+        "/api/calendar",
+        params={
+            "service_id": sid,
+            "start_date": prev_day.isoformat(),
+            "end_date": next_day.isoformat(),
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert set(data) == {
+        prev_day.isoformat(),
+        day.isoformat(),
+        next_day.isoformat(),
+    }
+    assert data[day.isoformat()] == "available"
+
+
+def test_calendar_marks_closed_day():
+    sid = client.get("/api/services").json()[0]["id"]
+    day = local_now().date() + timedelta(days=1)
+    while day.weekday() != 6:  # domingo
+        day += timedelta(days=1)
+
+    r = client.get(
+        "/api/calendar",
+        params={
+            "service_id": sid,
+            "start_date": day.isoformat(),
+            "end_date": day.isoformat(),
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()[day.isoformat()] == "closed"
+
+
+def test_calendar_marks_day_without_slots_as_occupied():
+    db = SessionLocal()
+    service = models.Service(
+        name="Jornada completa", duration_min=700, price=0, active=True
+    )
+    db.add(service)
+    db.commit()
+    db.refresh(service)
+    service_id = service.id
+    db.close()
+
+    day = _next_open_day_at(11).date()
+    r = client.get(
+        "/api/calendar",
+        params={
+            "service_id": service_id,
+            "start_date": day.isoformat(),
+            "end_date": day.isoformat(),
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()[day.isoformat()] == "occupied"
+
+
+def test_calendar_rejects_unknown_service():
+    r = client.get(
+        "/api/calendar",
+        params={
+            "service_id": 99999,
+            "start_date": "2026-11-11",
+            "end_date": "2026-11-12",
+        },
+    )
+    assert r.status_code == 404
+
+
+def test_calendar_rejects_inverted_range():
+    sid = client.get("/api/services").json()[0]["id"]
+    r = client.get(
+        "/api/calendar",
+        params={
+            "service_id": sid,
+            "start_date": "2026-11-12",
+            "end_date": "2026-11-11",
+        },
+    )
+    assert r.status_code == 422
+
+
+def test_calendar_rejects_ranges_over_limit():
+    sid = client.get("/api/services").json()[0]["id"]
+    start = local_now().date()
+    end = start + timedelta(days=63)
+    r = client.get(
+        "/api/calendar",
+        params={
+            "service_id": sid,
+            "start_date": start.isoformat(),
+            "end_date": end.isoformat(),
+        },
+    )
+    assert r.status_code == 422
+

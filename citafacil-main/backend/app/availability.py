@@ -9,6 +9,8 @@ from . import models
 from .config import settings
 from .utils import local_now
 
+MAX_CALENDAR_DAYS = 62
+
 
 def _overlaps(a_start: datetime, a_end: datetime, b_start: datetime, b_end: datetime) -> bool:
     """True si dos intervalos [inicio, fin) se solapan."""
@@ -68,6 +70,10 @@ def get_calendar_availability(
         raise LookupError("Servicio no encontrado.")
     if end_date < start_date:
         raise ValueError("end_date debe ser igual o posterior a start_date.")
+    if (end_date - start_date).days > MAX_CALENDAR_DAYS:
+        raise ValueError(
+            f"El rango no puede superar los {MAX_CALENDAR_DAYS} días."
+        )
 
     availability: dict[str, str] = {}
     day = start_date

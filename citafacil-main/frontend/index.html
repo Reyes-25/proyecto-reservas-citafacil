@@ -75,6 +75,33 @@
   .slot.sel{background:var(--grad);border-color:transparent;color:#fff}
   .empty{color:var(--muted);font-size:.9rem;padding:10px 0;display:flex;align-items:center;gap:9px}
 
+  .calendar{background:var(--bg-soft);border:1.5px solid var(--border);border-radius:12px;padding:14px}
+  .cal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+  .cal-title{font-weight:700;font-size:.95rem;text-transform:capitalize}
+  .cal-nav{width:34px;height:34px;border-radius:9px;border:1.5px solid var(--border);background:transparent;
+    color:var(--text);cursor:pointer;display:grid;place-items:center;transition:all .15s}
+  .cal-nav:hover:not(:disabled){border-color:var(--accent);color:var(--accent-2)}
+  .cal-nav:disabled{opacity:.35;cursor:not-allowed}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .cal-dow{text-align:center;font-size:.7rem;color:var(--muted);font-weight:700;text-transform:uppercase;
+    letter-spacing:.05em;padding:2px 0 4px}
+  .cal-day{aspect-ratio:1/1;border:1.5px solid transparent;border-radius:9px;background:transparent;color:var(--muted);
+    font:inherit;font-size:.88rem;font-weight:600;display:grid;place-items:center;cursor:default;transition:all .15s;padding:0}
+  .cal-day.blank{visibility:hidden}
+  .cal-day.available{background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.28);color:var(--text);cursor:pointer}
+  .cal-day.available:hover{border-color:var(--ok);background:rgba(34,197,94,.18)}
+  .cal-day.selected{background:var(--grad);border-color:transparent;color:#fff;box-shadow:0 5px 16px rgba(59,130,246,.35)}
+  .cal-day.occupied{background:rgba(248,113,113,.07);border-color:rgba(248,113,113,.22);color:rgba(248,113,113,.55);
+    text-decoration:line-through}
+  .cal-day.closed{opacity:.35}
+  .cal-day.past{opacity:.22}
+  .cal-day.today{box-shadow:inset 0 0 0 1.5px var(--accent-2)}
+  .cal-day.today.selected{box-shadow:0 5px 16px rgba(59,130,246,.35)}
+  .cal-legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;color:var(--muted);font-size:.75rem}
+  .cal-legend span{display:inline-flex;align-items:center;gap:6px}
+  .cal-dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+  .cal-dot.available{background:var(--ok)} .cal-dot.occupied{background:var(--err)} .cal-dot.closed{background:var(--muted)}
+
   .btn{display:inline-flex;align-items:center;gap:9px;padding:13px 24px;border-radius:12px;font-weight:700;font-size:.98rem;
     cursor:pointer;border:none;background:var(--grad);color:#fff;box-shadow:0 8px 22px rgba(59,130,246,.3);transition:transform .15s,opacity .2s}
   .btn:hover{transform:translateY(-2px)} .btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
@@ -134,7 +161,24 @@
     <div class="card disabled" id="cardWhen">
       <h2><i class="fa-solid fa-calendar-day"></i> Elige día y hora</h2>
       <p class="hint" id="whenHint">Primero selecciona un servicio.</p>
-      <div class="field"><label for="dateInput">Fecha</label><input type="date" id="dateInput" /></div>
+      <div class="field">
+        <label id="calLabel">Fecha</label>
+        <div class="calendar" id="calendar" role="group" aria-labelledby="calLabel">
+          <div class="cal-head">
+            <button class="cal-nav" id="calPrev" type="button" aria-label="Mes anterior"><i class="fa-solid fa-chevron-left"></i></button>
+            <div class="cal-title" id="calTitle" aria-live="polite"></div>
+            <button class="cal-nav" id="calNext" type="button" aria-label="Mes siguiente"><i class="fa-solid fa-chevron-right"></i></button>
+          </div>
+          <div class="cal-grid" id="calGrid"></div>
+          <div class="cal-legend">
+            <span><i class="cal-dot available"></i> Disponible</span>
+            <span><i class="cal-dot occupied"></i> Ocupado</span>
+            <span><i class="cal-dot closed"></i> Cerrado</span>
+          </div>
+          <div class="empty" id="calMsg" style="display:none"></div>
+        </div>
+        <input type="hidden" id="dateInput" />
+      </div>
       <div><label>Horarios disponibles</label><div class="slots" id="slots"><div class="empty">Elige una fecha.</div></div></div>
     </div>
 
@@ -200,6 +244,14 @@
   const state = { service:null, date:null, time:null, services:[] };
   const $ = id => document.getElementById(id);
 
+  const CAL_MONTHS = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+  const CAL_DOW = ["lun","mar","mié","jue","vie","sáb","dom"];
+  let calendarMonth = new Date();
+  let calendarReq = 0;
+  const toISODate = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  const todayISO = () => toISODate(new Date());
+  const currentMonth = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); };
+
   function setStep(n){
     $("st1").className = "step" + (n>1?" done":(n===1?" active":""));
     $("st2").className = "step" + (n>2?" done":(n===2?" active":""));
@@ -211,6 +263,7 @@
   const sleep = ms => new Promise(r=>setTimeout(r, ms));
 
   async function init(){
+    initCalendar();
     const grid = $("svcGrid");
     grid.innerHTML = '<div class="empty"><span class="spin"></span> Cargando servicios…</div>';
 
@@ -251,7 +304,7 @@
     }catch(e){ /* usa defaults */ }
 
     // fecha mínima = hoy
-    $("dateInput").min = new Date().toISOString().slice(0,10);
+    $("dateInput").min = todayISO();
   }
 
   function renderServices(){
@@ -272,12 +325,131 @@
     document.querySelectorAll(".svc").forEach(x=>x.classList.remove("sel"));
     el.classList.add("sel");
     $("whenHint").textContent = `${s.name} · ${s.duration_min} min · ${money(s.price)}`;
+    state.date = null;
+    $("dateInput").value = "";
+    $("slots").innerHTML = '<div class="empty">Elige un día disponible en el calendario.</div>';
+    calendarMonth = currentMonth();
     setStep(2);
-    if($("dateInput").value) loadSlots();
+    loadCalendar();
     $("cardWhen").scrollIntoView({behavior:"smooth", block:"center"});
   }
 
-  $("dateInput").addEventListener("change", loadSlots);
+  function initCalendar(){
+    calendarMonth = currentMonth();
+    $("calTitle").textContent = `${CAL_MONTHS[calendarMonth.getMonth()]} ${calendarMonth.getFullYear()}`;
+    $("calGrid").innerHTML = "";
+    CAL_DOW.forEach(d=>{
+      const el = document.createElement("div");
+      el.className = "cal-dow";
+      el.textContent = d;
+      $("calGrid").appendChild(el);
+    });
+    $("calPrev").disabled = true;
+    $("calNext").disabled = false;
+  }
+
+  function changeMonth(delta){
+    const min = currentMonth();
+    const max = new Date(min.getFullYear(), min.getMonth()+6, 1);
+    const target = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth()+delta, 1);
+    if(target < min || target > max) return;
+    calendarMonth = target;
+    state.date = null; state.time = null;
+    $("dateInput").value = "";
+    $("slots").innerHTML = '<div class="empty">Elige un día disponible en el calendario.</div>';
+    setStep(2);
+    loadCalendar();
+  }
+
+  async function loadCalendar(){
+    if(!state.service) return;
+    const start = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
+    const end = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth()+1, 0);
+    const myReq = ++calendarReq;
+    const msg = $("calMsg");
+    msg.style.display = "flex";
+    msg.innerHTML = '<span class="spin"></span> Cargando disponibilidad…';
+    try{
+      const data = await api(`/api/calendar?service_id=${state.service.id}&start_date=${toISODate(start)}&end_date=${toISODate(end)}`, null, 65000);
+      if(myReq !== calendarReq) return;
+      msg.style.display = "none";
+      renderCalendar(data || {});
+    }catch(e){
+      if(myReq !== calendarReq) return;
+      renderCalendar({});
+      msg.style.display = "flex";
+      msg.textContent = "No pudimos cargar el calendario. Reintenta.";
+    }
+  }
+
+  function renderCalendar(statusMap){
+    const grid = $("calGrid");
+    const year = calendarMonth.getFullYear(), month = calendarMonth.getMonth();
+    $("calTitle").textContent = `${CAL_MONTHS[month]} ${year}`;
+    const min = currentMonth();
+    const max = new Date(min.getFullYear(), min.getMonth()+6, 1);
+    $("calPrev").disabled = calendarMonth <= min;
+    $("calNext").disabled = calendarMonth >= max;
+
+    grid.innerHTML = "";
+    CAL_DOW.forEach(d=>{
+      const el = document.createElement("div");
+      el.className = "cal-dow";
+      el.textContent = d;
+      grid.appendChild(el);
+    });
+
+    const first = new Date(year, month, 1);
+    const offset = (first.getDay() + 6) % 7; // lunes = 0
+    for(let i=0; i<offset; i++){
+      const blank = document.createElement("div");
+      blank.className = "cal-day blank";
+      grid.appendChild(blank);
+    }
+
+    const daysInMonth = new Date(year, month+1, 0).getDate();
+    const today = todayISO();
+    for(let d=1; d<=daysInMonth; d++){
+      const iso = toISODate(new Date(year, month, d));
+      const status = statusMap[iso];
+      const isPast = iso < today;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = d;
+      let cls = "cal-day";
+      let disabled = false;
+      let label = `${d}, no disponible`;
+      if(isPast){
+        cls += " past"; disabled = true; label = `${d}, fecha pasada`;
+      }else if(status === "available"){
+        cls += " available"; label = `${d}, disponible`;
+      }else if(status === "occupied"){
+        cls += " occupied"; disabled = true; label = `${d}, ocupado`;
+      }else{
+        cls += " closed"; disabled = true;
+      }
+      if(iso === state.date) cls += " selected";
+      if(iso === today) cls += " today";
+      btn.className = cls;
+      btn.disabled = disabled;
+      btn.setAttribute("aria-label", label);
+      if(!disabled) btn.onclick = () => selectDay(iso, btn);
+      grid.appendChild(btn);
+    }
+  }
+
+  function selectDay(iso, btn){
+    state.date = iso;
+    state.time = null;
+    $("dateInput").value = iso;
+    document.querySelectorAll(".cal-day.selected").forEach(x=>x.classList.remove("selected"));
+    btn.classList.add("selected");
+    setStep(2);
+    loadSlots();
+  }
+
+  $("calPrev").addEventListener("click", ()=>changeMonth(-1));
+  $("calNext").addEventListener("click", ()=>changeMonth(1));
 
   // Token incremental: solo la última petición pinta el resultado (evita que una
   // respuesta vieja pise a la nueva cuando se teclea la fecha dígito a dígito).
