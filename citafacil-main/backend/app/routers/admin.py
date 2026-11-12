@@ -66,6 +66,7 @@ def get_forecast(
     start_date: date = Query(..., description="Inicio del rango (YYYY-MM-DD)"),
     end_date: date = Query(..., description="Fin del rango (YYYY-MM-DD)"),
     granularity: str = Query("day", pattern="^(day|week|month)$"),
+    service_id: Optional[int] = Query(None, description="Filtrar por servicio"),
     db: Session = Depends(get_db),
 ):
     if end_date < start_date:
@@ -73,7 +74,9 @@ def get_forecast(
             status_code=422,
             detail="end_date debe ser igual o posterior a start_date.",
         )
-    return crud.get_appointment_history(db, start_date, end_date, granularity)
+    return crud.get_appointment_history(
+        db, start_date, end_date, granularity, service_id
+    )
 
 
 @router.patch("/appointments/{appt_id}", response_model=schemas.AppointmentOut, summary="Cambiar estado")

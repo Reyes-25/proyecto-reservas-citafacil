@@ -8,9 +8,9 @@
 | Métrica | Valor |
 |---|---|
 | Total de pasos | 22 |
-| Completados | 13 |
+| Completados | 15 |
 | En progreso | 0 |
-| Pendientes | 9 |
+| Pendientes | 7 |
 | Última actualización | 2026-11-11 |
 
 ## Pasos
@@ -32,8 +32,8 @@
 | 13 | Fase 2 | Evidencias, `AI_LOG.md` y README de Issue #2 | ✅ Completado | 2026-11-11 | `30_calendario_disponibilidad.png`, log y README |
 | 14 | Fase 3 | Decidir alcance de correo en Issue #1 | ⏳ Pendiente | — | — |
 | 15 | Fase 3 | Verificar reserva rápida y cerrar Issue #1 | ⏳ Pendiente | — | — |
-| 16 | Fase 3 | Filtro por servicio en `/api/admin/forecast` | ⏳ Pendiente | — | — |
-| 17 | Fase 3 | Selector de servicio y test del filtro (Issue #3) | ⏳ Pendiente | — | — |
+| 16 | Fase 3 | Filtro por servicio en `/api/admin/forecast` | ✅ Completado | 2026-11-11 | `service_id` opcional en CRUD y router; `13 passed` |
+| 17 | Fase 3 | Selector de servicio y test del filtro (Issue #3) | ✅ Completado | 2026-11-11 | Selector en `admin.html`, rango de 90 días y test |
 | 18 | Fase 4 | Implementar correo de confirmación (Issue #4) | ⏳ Pendiente | — | — |
 | 19 | Fase 4 | Implementar panel de métricas (Issue #5) | ⏳ Pendiente | — | — |
 | 20 | Cierre | Actualizar README y `AI_LOG.md` final | ⏳ Pendiente | — | — |
@@ -48,3 +48,4 @@
 | 2026-11-11 | Fase 0 completada | Entorno Python 3.12 + tests base (6 passed) |
 | 2026-11-11 | Fase 1 completada | `AI_LOG.md` resuelto, merge limpio y rama publicada (`d4a501a`) |
 | 2026-11-11 | Fase 2 completada | Límite de rango, 6 tests nuevos (12 passed), calendario visual y evidencia |
+| 2026-11-11 | Fase 3 (parcial) | Filtro por servicio y rango de 90 días para Issue #3 |

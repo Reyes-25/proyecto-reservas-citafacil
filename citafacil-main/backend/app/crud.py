@@ -76,7 +76,11 @@ def list_appointments(
 
 
 def get_appointment_history(
-    db: Session, start_date: date, end_date: date, granularity: str = "day"
+    db: Session,
+    start_date: date,
+    end_date: date,
+    granularity: str = "day",
+    service_id: Optional[int] = None,
 ) -> list[dict[str, date | int]]:
     """Cuenta citas no canceladas agrupadas por día, semana o mes."""
     if end_date < start_date:
@@ -108,13 +112,17 @@ def get_appointment_history(
         else:
             period += timedelta(days=1)
 
+    filters = [
+        models.Appointment.status != models.STATUS_CANCELLED,
+        models.Appointment.start_at >= datetime.combine(start_date, time.min),
+        models.Appointment.start_at <= datetime.combine(end_date, time.max),
+    ]
+    if service_id is not None:
+        filters.append(models.Appointment.service_id == service_id)
+
     appointments = (
         db.query(models.Appointment.start_at)
-        .filter(
-            models.Appointment.status != models.STATUS_CANCELLED,
-            models.Appointment.start_at >= datetime.combine(start_date, time.min),
-            models.Appointment.start_at <= datetime.combine(end_date, time.max),
-        )
+        .filter(*filters)
         .all()
     )
     for (start_at,) in appointments:

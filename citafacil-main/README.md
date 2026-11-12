@@ -12,6 +12,6 @@
 ## Historias de Usuario
 - [ ] Issue #1: Reserva rápida con datos guardados
 - [x] Issue #2: Calendario dinámico
-- [ ] Issue #3: Gráficos de previsión
+- [x] Issue #3: Gráficos de previsión
 - [ ] Issue #4: Correo de confirmación
 - [ ] Issue #5: Panel de métricas

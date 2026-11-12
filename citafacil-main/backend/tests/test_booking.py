@@ -222,3 +222,58 @@ def test_calendar_rejects_ranges_over_limit():
     )
     assert r.status_code == 422
 
+
+# ---------- Previsión de demanda ----------
+def test_forecast_filters_by_service():
+    headers = {"X-Admin-Token": "test-token"}
+    service_1 = client.get("/api/services").json()[0]
+    service_2 = client.post(
+        "/api/admin/services",
+        headers=headers,
+        json={"name": "Barba", "duration_min": 30, "price": 5000},
+    ).json()
+
+    day = _next_open_day_at(11)
+    common = {"customer_name": "Cliente", "customer_phone": "942916570"}
+    r1 = client.post(
+        "/api/appointments",
+        json={
+            **common,
+            "service_id": service_1["id"],
+            "start_at": day.isoformat(),
+        },
+    )
+    assert r1.status_code == 201, r1.text
+    r2 = client.post(
+        "/api/appointments",
+        json={
+            **common,
+            "service_id": service_2["id"],
+            "start_at": day.replace(hour=12).isoformat(),
+        },
+    )
+    assert r2.status_code == 201, r2.text
+
+    params = {
+        "start_date": day.date().isoformat(),
+        "end_date": day.date().isoformat(),
+    }
+    all_data = client.get(
+        "/api/admin/forecast", headers=headers, params=params
+    ).json()
+    only_service_1 = client.get(
+        "/api/admin/forecast",
+        headers=headers,
+        params={**params, "service_id": service_1["id"]},
+    ).json()
+    only_service_2 = client.get(
+        "/api/admin/forecast",
+        headers=headers,
+        params={**params, "service_id": service_2["id"]},
+    ).json()
+
+    assert all_data[0]["count"] == 2
+    assert only_service_1[0]["count"] == 1
+    assert only_service_2[0]["count"] == 1
+
+
