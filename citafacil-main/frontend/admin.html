@@ -184,6 +184,7 @@
 
   const $ = id => document.getElementById(id);
   const money = n => "$" + (n||0).toLocaleString("es-CL");
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   const toDateString = day => {
     const year = day.getFullYear();
     const month = String(day.getMonth() + 1).padStart(2, "0");
@@ -396,8 +397,8 @@
       list.forEach(a=>{
         const tr=document.createElement("tr");
         const svc = a.service ? a.service.name : ("#"+a.service_id);
-        tr.innerHTML = `<td class="mono">${fmtDT(a.start_at)}</td><td>${a.customer_name}</td>
-          <td class="mono">${a.customer_phone}</td><td>${svc}</td>
+        tr.innerHTML = `<td class="mono">${fmtDT(a.start_at)}</td><td>${esc(a.customer_name)}</td>
+          <td class="mono">${esc(a.customer_phone)}${a.customer_email ? `<div style="font-family:'Plus Jakarta Sans',sans-serif;color:var(--muted);font-size:.78rem">${esc(a.customer_email)}</div>` : ""}</td><td>${esc(svc)}</td>
           <td><span class="badge b-${a.status}">${STLABEL[a.status]||a.status}</span></td>
           <td><div class="actions">
             <button class="ico ok" title="Confirmar" onclick="setStatus(${a.id},'confirmed')"><i class="fa-solid fa-check"></i></button>

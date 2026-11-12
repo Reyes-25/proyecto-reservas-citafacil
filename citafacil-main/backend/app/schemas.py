@@ -1,6 +1,7 @@
 """Esquemas Pydantic (validación de entrada/salida de la API)."""
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 from typing import Optional
 
@@ -38,6 +39,7 @@ class ServiceOut(ServiceBase):
 class AppointmentCreate(BaseModel):
     customer_name: str = Field(..., min_length=2, max_length=120)
     customer_phone: str = Field(..., examples=["+56 9 4291 6570"])
+    customer_email: str = Field("", max_length=120, examples=["camila@example.com"])
     service_id: int
     start_at: datetime = Field(..., description="Inicio de la cita (ISO 8601)")
     notes: str = Field("", max_length=300)
@@ -50,6 +52,16 @@ class AppointmentCreate(BaseModel):
         except PhoneError as e:
             raise ValueError(str(e))
 
+    @field_validator("customer_email")
+    @classmethod
+    def _validate_email(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            return ""
+        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", v):
+            raise ValueError("Ingresa un correo electrónico válido.")
+        return v.lower()
+
     @field_validator("start_at")
     @classmethod
     def _naive_local(cls, v: datetime) -> datetime:
@@ -61,6 +73,7 @@ class AppointmentOut(BaseModel):
     id: int
     customer_name: str
     customer_phone: str
+    customer_email: str
     service_id: int
     start_at: datetime
     end_at: datetime
