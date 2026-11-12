@@ -105,6 +105,59 @@ def test_reject_invalid_phone_on_booking():
     assert r.status_code == 422  # falla validación de teléfono
 
 
+def test_booking_with_email_sends_confirmation(monkeypatch):
+    sent = {}
+
+    def fake_send(to_email, subject, body):
+        sent.update(to=to_email, subject=subject, body=body)
+        return {"ok": True, "mode": "test"}
+
+    monkeypatch.setattr("app.routers.public.send_email", fake_send)
+
+    sid = client.get("/api/services").json()[0]["id"]
+    start = _next_open_day_at(11)
+    r = client.post(
+        "/api/appointments",
+        json={
+            "customer_name": "Camila",
+            "customer_phone": "942916570",
+            "customer_email": "Camila@Example.COM",
+            "service_id": sid,
+            "start_at": start.isoformat(),
+        },
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["customer_email"] == "camila@example.com"
+    assert sent["to"] == "camila@example.com"
+    assert "Confirmación" in sent["subject"]
+    assert "Corte" in sent["body"]
+
+
+def test_reject_invalid_email():
+    sid = client.get("/api/services").json()[0]["id"]
+    start = _next_open_day_at(11)
+    r = client.post(
+        "/api/appointments",
+        json={
+            "customer_name": "Camila",
+            "customer_phone": "942916570",
+            "customer_email": "no-es-correo",
+            "service_id": sid,
+            "start_at": start.isoformat(),
+        },
+    )
+    assert r.status_code == 422
+
+
+def test_send_email_demo_mode():
+    from app.notifications import send_email
+
+    result = send_email("cliente@example.com", "Prueba", "Cuerpo")
+    assert result["ok"] is True
+    assert result["mode"] == "demo"
+
+
+
 # ---------- Administración ----------
 def test_admin_auth():
     assert client.get("/api/admin/appointments").status_code == 422  # falta cabecera
@@ -221,4 +274,107 @@ def test_calendar_rejects_ranges_over_limit():
         },
     )
     assert r.status_code == 422
+
+
+# ---------- Previsión de demanda ----------
+def test_forecast_filters_by_service():
+    headers = {"X-Admin-Token": "test-token"}
+    service_1 = client.get("/api/services").json()[0]
+    service_2 = client.post(
+        "/api/admin/services",
+        headers=headers,
+        json={"name": "Barba", "duration_min": 30, "price": 5000},
+    ).json()
+
+    day = _next_open_day_at(11)
+    common = {"customer_name": "Cliente", "customer_phone": "942916570"}
+    r1 = client.post(
+        "/api/appointments",
+        json={
+            **common,
+            "service_id": service_1["id"],
+            "start_at": day.isoformat(),
+        },
+    )
+    assert r1.status_code == 201, r1.text
+    r2 = client.post(
+        "/api/appointments",
+        json={
+            **common,
+            "service_id": service_2["id"],
+            "start_at": day.replace(hour=12).isoformat(),
+        },
+    )
+    assert r2.status_code == 201, r2.text
+
+    params = {
+        "start_date": day.date().isoformat(),
+        "end_date": day.date().isoformat(),
+    }
+    all_data = client.get(
+        "/api/admin/forecast", headers=headers, params=params
+    ).json()
+    only_service_1 = client.get(
+        "/api/admin/forecast",
+        headers=headers,
+        params={**params, "service_id": service_1["id"]},
+    ).json()
+    only_service_2 = client.get(
+        "/api/admin/forecast",
+        headers=headers,
+        params={**params, "service_id": service_2["id"]},
+    ).json()
+
+    assert all_data[0]["count"] == 2
+    assert only_service_1[0]["count"] == 1
+    assert only_service_2[0]["count"] == 1
+
+
+# ---------- Métricas ----------
+def test_admin_metrics_for_range():
+    db = SessionLocal()
+    service = db.query(models.Service).first()
+    service_id, price = service.id, service.price
+    now = local_now()
+    start_at = now.replace(hour=10, minute=0, second=0, microsecond=0)
+    db.add(
+        models.Appointment(
+            customer_name="Cliente Métricas",
+            customer_phone="+56942916570",
+            service_id=service_id,
+            start_at=start_at,
+            end_at=start_at + timedelta(minutes=service.duration_min),
+            status=models.STATUS_PENDING,
+            notes="",
+        )
+    )
+    db.commit()
+    db.close()
+
+    today = now.date().isoformat()
+    r = client.get(
+        "/api/admin/metrics",
+        headers={"X-Admin-Token": "test-token"},
+        params={"start_date": today, "end_date": today},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json() == {
+        "start_date": today,
+        "end_date": today,
+        "appointments": 1,
+        "estimated_revenue": price,
+        "today": 1,
+        "week": 1,
+    }
+
+
+def test_admin_metrics_rejects_inverted_range():
+    r = client.get(
+        "/api/admin/metrics",
+        headers={"X-Admin-Token": "test-token"},
+        params={"start_date": "2026-11-12", "end_date": "2026-11-11"},
+    )
+    assert r.status_code == 422
+
+
 

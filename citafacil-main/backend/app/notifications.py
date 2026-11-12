@@ -7,7 +7,9 @@
 from __future__ import annotations
 
 import logging
+import smtplib
 from datetime import datetime
+from email.message import EmailMessage
 
 from .config import settings
 
@@ -36,6 +38,63 @@ def reminder_message(business: str, customer_name: str, service_name: str, start
         f"🗓️ {_fmt_dt(start_at)}\n\n"
         f"Si no puedes asistir, responde este mensaje. ¡Gracias!"
     )
+
+
+def confirmation_email(
+    business: str, customer_name: str, service_name: str, start_at: datetime
+) -> tuple[str, str]:
+    """Asunto y cuerpo del correo de confirmación."""
+    subject = f"Confirmación de tu cita en {business}"
+    body = (
+        f"Hola {customer_name},\n\n"
+        f"Tu cita en {business} quedó confirmada:\n"
+        f"Servicio: {service_name}\n"
+        f"Fecha y hora: {_fmt_dt(start_at)}\n"
+        f"Profesional: {business}\n\n"
+        "¡Te esperamos!"
+    )
+    return subject, body
+
+
+def send_email(to_email: str, subject: str, body: str) -> dict:
+    """Envía un correo por SMTP. En modo demo solo registra el mensaje."""
+    if not settings.email_enabled:
+        logger.info("[Email DEMO] Para %s | %s\n%s", to_email, subject, body)
+        return {
+            "ok": True,
+            "mode": "demo",
+            "detail": "SMTP no configurado; correo simulado.",
+        }
+
+    try:
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = settings.smtp_from
+        msg["To"] = to_email
+        msg.set_content(body)
+
+        if settings.smtp_port == 465:
+            with smtplib.SMTP_SSL(
+                settings.smtp_host, settings.smtp_port, timeout=15
+            ) as smtp:
+                if settings.smtp_user:
+                    smtp.login(settings.smtp_user, settings.smtp_password)
+                smtp.send_message(msg)
+        else:
+            with smtplib.SMTP(
+                settings.smtp_host, settings.smtp_port, timeout=15
+            ) as smtp:
+                if settings.smtp_tls:
+                    smtp.starttls()
+                if settings.smtp_user:
+                    smtp.login(settings.smtp_user, settings.smtp_password)
+                smtp.send_message(msg)
+
+        logger.info("Correo enviado a %s", to_email)
+        return {"ok": True, "mode": "smtp"}
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Error enviando correo a %s: %s", to_email, exc)
+        return {"ok": False, "mode": "smtp", "error": str(exc)}
 
 
 def send_whatsapp(to_e164: str, body: str) -> dict:

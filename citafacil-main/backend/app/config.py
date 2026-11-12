@@ -31,13 +31,21 @@ class Settings(BaseSettings):
     # --- Seguridad ---
     admin_token: str = "cambia-este-token-admin"
     cors_origins: str = "*"      # separado por comas, o "*" para todos
-
     # --- Twilio / WhatsApp ---
     twilio_account_sid: str = ""
     twilio_auth_token: str = ""
     twilio_whatsapp_from: str = ""      # ej: "whatsapp:+14155238886"
-    reminder_hours_before: int = 24     # cuántas horas antes recordar
-    reminder_poll_minutes: int = 15     # cada cuánto revisa el programador
+    reminder_hours_before: int = 24    # cuántas horas antes recordar
+    reminder_poll_minutes: int = 15    # cada cuánto revisa el programador
+
+    # --- Correo (SMTP) ---
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""                # ej: "CitaFácil <no-reply@citafacil.cl>"
+    smtp_tls: bool = True
+
 
     # --- Helpers derivados ---
     @property
@@ -58,6 +66,11 @@ class Settings(BaseSettings):
             and self.twilio_auth_token
             and self.twilio_whatsapp_from
         )
+
+    @property
+    def email_enabled(self) -> bool:
+        """True solo si hay servidor SMTP y remitente configurados."""
+        return bool(self.smtp_host and self.smtp_from)
 
 
 settings = Settings()
