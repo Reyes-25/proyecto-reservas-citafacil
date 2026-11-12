@@ -49,6 +49,7 @@ def create_appointment(
     obj = models.Appointment(
         customer_name=data.customer_name.strip(),
         customer_phone=data.customer_phone,
+        customer_email=data.customer_email,
         service_id=service.id,
         start_at=data.start_at,
         end_at=end_at,

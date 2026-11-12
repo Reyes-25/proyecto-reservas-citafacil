@@ -105,6 +105,59 @@ def test_reject_invalid_phone_on_booking():
     assert r.status_code == 422  # falla validación de teléfono
 
 
+def test_booking_with_email_sends_confirmation(monkeypatch):
+    sent = {}
+
+    def fake_send(to_email, subject, body):
+        sent.update(to=to_email, subject=subject, body=body)
+        return {"ok": True, "mode": "test"}
+
+    monkeypatch.setattr("app.routers.public.send_email", fake_send)
+
+    sid = client.get("/api/services").json()[0]["id"]
+    start = _next_open_day_at(11)
+    r = client.post(
+        "/api/appointments",
+        json={
+            "customer_name": "Camila",
+            "customer_phone": "942916570",
+            "customer_email": "Camila@Example.COM",
+            "service_id": sid,
+            "start_at": start.isoformat(),
+        },
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["customer_email"] == "camila@example.com"
+    assert sent["to"] == "camila@example.com"
+    assert "Confirmación" in sent["subject"]
+    assert "Corte" in sent["body"]
+
+
+def test_reject_invalid_email():
+    sid = client.get("/api/services").json()[0]["id"]
+    start = _next_open_day_at(11)
+    r = client.post(
+        "/api/appointments",
+        json={
+            "customer_name": "Camila",
+            "customer_phone": "942916570",
+            "customer_email": "no-es-correo",
+            "service_id": sid,
+            "start_at": start.isoformat(),
+        },
+    )
+    assert r.status_code == 422
+
+
+def test_send_email_demo_mode():
+    from app.notifications import send_email
+
+    result = send_email("cliente@example.com", "Prueba", "Cuerpo")
+    assert result["ok"] is True
+    assert result["mode"] == "demo"
+
+
+
 # ---------- Administración ----------
 def test_admin_auth():
     assert client.get("/api/admin/appointments").status_code == 422  # falta cabecera

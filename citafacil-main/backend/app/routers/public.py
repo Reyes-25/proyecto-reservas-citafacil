@@ -10,7 +10,12 @@ from .. import crud, schemas
 from ..availability import generate_slots, get_calendar_availability, is_slot_free
 from ..config import settings
 from ..database import get_db
-from ..notifications import confirmation_message, send_whatsapp
+from ..notifications import (
+    confirmation_email,
+    confirmation_message,
+    send_email,
+    send_whatsapp,
+)
 
 router = APIRouter(prefix="/api", tags=["Público"])
 
@@ -87,4 +92,12 @@ def create_appointment(payload: schemas.AppointmentCreate, db: Session = Depends
         settings.business_name, appt.customer_name, service.name, appt.start_at
     )
     send_whatsapp(appt.customer_phone, body)
+
+    # Confirmación por correo (solo si el cliente lo proporcionó).
+    if appt.customer_email:
+        subject, email_body = confirmation_email(
+            settings.business_name, appt.customer_name, service.name, appt.start_at
+        )
+        send_email(appt.customer_email, subject, email_body)
+
     return appt
