@@ -63,6 +63,7 @@
 
   input,textarea{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:11px;color:var(--text);
     font:inherit;padding:12px 14px;transition:border-color .2s,box-shadow .2s}
+  .field input[type=checkbox]{width:auto;padding:0;accent-color:var(--accent);vertical-align:middle;margin-right:8px}
   input:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,130,246,.15)}
   label{display:block;font-size:.85rem;color:var(--muted);margin:0 0 7px;font-weight:600}
   .field{margin-bottom:16px}
@@ -145,6 +146,7 @@
       <div class="summary" id="summary"></div>
       <div class="field"><label for="name">Nombre y apellido</label><input id="name" placeholder="Ej: Camila Rojas" autocomplete="name" /></div>
       <div class="field"><label for="phone">Celular (WhatsApp)</label><input id="phone" placeholder="+56 9 XXXX XXXX" inputmode="tel" autocomplete="tel" /></div>
+      <div class="field"><label><input type="checkbox" id="rememberData" checked /> Recordar mis datos para la próxima reserva</label></div>
       <div class="field"><label for="notes">Nota (opcional)</label><input id="notes" placeholder="Algo que debamos saber" /></div>
       <button class="btn" id="confirmBtn"><i class="fa-solid fa-check"></i> Confirmar reserva</button>
       <div class="msg" id="formMsg"></div>
@@ -211,6 +213,9 @@
   const sleep = ms => new Promise(r=>setTimeout(r, ms));
 
   async function init(){
+    $("name").value = localStorage.getItem("citafacil_customer_name") || "";
+    $("phone").value = localStorage.getItem("citafacil_customer_phone") || "";
+
     const grid = $("svcGrid");
     grid.innerHTML = '<div class="empty"><span class="spin"></span> Cargando servicios…</div>';
 
@@ -337,6 +342,13 @@
       const payload={customer_name:name, customer_phone:phone, service_id:state.service.id,
         start_at:`${state.date}T${state.time}:00`, notes:$("notes").value.trim()};
       await api("/api/appointments",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}, 65000);
+      if($("rememberData").checked){
+        localStorage.setItem("citafacil_customer_name", name);
+        localStorage.setItem("citafacil_customer_phone", phone);
+      }else{
+        localStorage.removeItem("citafacil_customer_name");
+        localStorage.removeItem("citafacil_customer_phone");
+      }
       const d=new Date(state.date+"T"+state.time);
       const fecha=d.toLocaleDateString("es-CL",{weekday:"long",day:"2-digit",month:"long"});
       $("doneMsg").innerHTML=`Te esperamos el <b>${fecha}</b> a las <b>${state.time}</b>.<br>Te enviamos la confirmación por WhatsApp a ${phone}.`;
