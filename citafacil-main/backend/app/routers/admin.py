@@ -102,6 +102,18 @@ def get_stats(db: Session = Depends(get_db)):
     return crud.stats(db)
 
 
+@router.get("/metrics", response_model=schemas.MetricsOut, summary="Métricas de citas e ingresos")
+def get_metrics(
+    start_date: date = Query(..., description="Inicio del rango (YYYY-MM-DD)"),
+    end_date: date = Query(..., description="Fin del rango (YYYY-MM-DD)"),
+    db: Session = Depends(get_db),
+):
+    try:
+        return crud.metrics(db, start_date, end_date)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+
 @router.post("/reminders/run", summary="Enviar recordatorios ahora")
 def trigger_reminders(db: Session = Depends(get_db)):
     return run_reminders(db)

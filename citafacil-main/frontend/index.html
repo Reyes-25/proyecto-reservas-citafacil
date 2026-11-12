@@ -63,6 +63,7 @@
 
   input,textarea{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:11px;color:var(--text);
     font:inherit;padding:12px 14px;transition:border-color .2s,box-shadow .2s}
+  .field input[type=checkbox]{width:auto;padding:0;accent-color:var(--accent);vertical-align:middle;margin-right:8px}
   input:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,130,246,.15)}
   label{display:block;font-size:.85rem;color:var(--muted);margin:0 0 7px;font-weight:600}
   .field{margin-bottom:16px}
@@ -136,7 +137,7 @@
 <section class="hero">
   <div class="wrap">
     <h1>Reserva tu hora <span class="grad-text">en segundos</span></h1>
-    <p id="heroSub">Elige un servicio, un día y una hora. Te enviamos la confirmación por WhatsApp.</p>
+    <p id="heroSub">Elige un servicio, un día y una hora. Te enviamos la confirmación por WhatsApp y correo.</p>
   </div>
 </section>
 
@@ -185,10 +186,12 @@
     <!-- Paso 3: Datos -->
     <div class="card disabled" id="cardWho">
       <h2><i class="fa-solid fa-user"></i> Tus datos</h2>
-      <p class="hint">Para confirmarte la reserva por WhatsApp.</p>
+      <p class="hint">Para confirmarte la reserva por WhatsApp y correo.</p>
       <div class="summary" id="summary"></div>
       <div class="field"><label for="name">Nombre y apellido</label><input id="name" placeholder="Ej: Camila Rojas" autocomplete="name" /></div>
       <div class="field"><label for="phone">Celular (WhatsApp)</label><input id="phone" placeholder="+56 9 XXXX XXXX" inputmode="tel" autocomplete="tel" /></div>
+      <div class="field"><label for="email">Correo electrónico (opcional)</label><input id="email" type="email" placeholder="tu@correo.cl" autocomplete="email" /></div>
+      <div class="field"><label><input type="checkbox" id="rememberData" checked /> Recordar mis datos para la próxima reserva</label></div>
       <div class="field"><label for="notes">Nota (opcional)</label><input id="notes" placeholder="Algo que debamos saber" /></div>
       <button class="btn" id="confirmBtn"><i class="fa-solid fa-check"></i> Confirmar reserva</button>
       <div class="msg" id="formMsg"></div>
@@ -229,6 +232,7 @@
   }
 
   const money = n => "$" + (n||0).toLocaleString("es-CL");
+  const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
   // fetch con timeout opcional (AbortController) para no colgarse en un arranque en frío.
   async function api(path, opts, timeoutMs){
@@ -264,6 +268,10 @@
 
   async function init(){
     initCalendar();
+    $("name").value = localStorage.getItem("citafacil_customer_name") || "";
+    $("phone").value = localStorage.getItem("citafacil_customer_phone") || "";
+    $("email").value = localStorage.getItem("citafacil_customer_email") || "";
+
     const grid = $("svcGrid");
     grid.innerHTML = '<div class="empty"><span class="spin"></span> Cargando servicios…</div>';
 
@@ -500,18 +508,32 @@
   }
 
   $("confirmBtn").addEventListener("click", async ()=>{
-    const name = $("name").value.trim(), phone = $("phone").value.trim();
+    const name = $("name").value.trim(), phone = $("phone").value.trim(), email = $("email").value.trim();
     const msg = $("formMsg"); msg.className="msg";
     if(name.length<2 || !phone){ msg.className="msg err"; msg.textContent="Completa tu nombre y celular."; return; }
+    if(email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){
+      msg.className="msg err"; msg.textContent="Ingresa un correo electrónico válido o déjalo vacío."; return;
+    }
     if(!state.service || !state.date || !state.time){ msg.className="msg err"; msg.textContent="Elige servicio, día y hora."; return; }
     const btn=$("confirmBtn"); btn.disabled=true; btn.innerHTML='<span class="spin"></span> Confirmando…';
     try{
-      const payload={customer_name:name, customer_phone:phone, service_id:state.service.id,
+      const payload={customer_name:name, customer_phone:phone, customer_email:email, service_id:state.service.id,
         start_at:`${state.date}T${state.time}:00`, notes:$("notes").value.trim()};
       await api("/api/appointments",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}, 65000);
+      if($("rememberData").checked){
+        localStorage.setItem("citafacil_customer_name", name);
+        localStorage.setItem("citafacil_customer_phone", phone);
+        if(email) localStorage.setItem("citafacil_customer_email", email);
+        else localStorage.removeItem("citafacil_customer_email");
+      }else{
+        localStorage.removeItem("citafacil_customer_name");
+        localStorage.removeItem("citafacil_customer_phone");
+        localStorage.removeItem("citafacil_customer_email");
+      }
       const d=new Date(state.date+"T"+state.time);
       const fecha=d.toLocaleDateString("es-CL",{weekday:"long",day:"2-digit",month:"long"});
-      $("doneMsg").innerHTML=`Te esperamos el <b>${fecha}</b> a las <b>${state.time}</b>.<br>Te enviamos la confirmación por WhatsApp a ${phone}.`;
+      const emailMsg = email ? `<br>También enviamos la confirmación a <b>${escapeHtml(email)}</b>.` : "";
+      $("doneMsg").innerHTML=`Te esperamos el <b>${fecha}</b> a las <b>${state.time}</b>.<br>Te enviamos la confirmación por WhatsApp a ${phone}.${emailMsg}`;
       ["cardSvc","cardWhen","cardWho"].forEach(id=>$(id).style.display="none");
       document.querySelector(".steps").style.display="none";
       $("cardDone").style.display="block";
