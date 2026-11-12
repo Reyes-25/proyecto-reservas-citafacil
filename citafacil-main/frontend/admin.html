@@ -112,6 +112,17 @@
       <div class="stats" id="stats"></div>
 
       <div class="card">
+        <h2><i class="fa-solid fa-chart-column"></i> Métricas de citas</h2>
+        <div class="toolbar">
+          <div class="field"><label for="mStart">Desde</label><input type="date" id="mStart" /></div>
+          <div class="field"><label for="mEnd">Hasta</label><input type="date" id="mEnd" /></div>
+          <button class="btn ghost sm" onclick="loadMetrics()"><i class="fa-solid fa-rotate"></i> Actualizar</button>
+        </div>
+        <div class="stats" id="metricsStats" style="margin-bottom:0"></div>
+        <div id="metricsMessage" class="forecast-message" role="status" aria-live="polite"></div>
+      </div>
+
+      <div class="card">
         <h2><i class="fa-solid fa-chart-line"></i> Demanda histórica</h2>
         <p class="forecast-message">Citas no canceladas por día durante los últimos 90 días.</p>
         <div class="toolbar" style="margin:14px 0">
@@ -173,6 +184,12 @@
 
   const $ = id => document.getElementById(id);
   const money = n => "$" + (n||0).toLocaleString("es-CL");
+  const toDateString = day => {
+    const year = day.getFullYear();
+    const month = String(day.getMonth() + 1).padStart(2, "0");
+    const date = String(day.getDate()).padStart(2, "0");
+    return `${year}-${month}-${date}`;
+  };
   let TOKEN = localStorage.getItem("citafacil_token") || "";
 
   function toast(msg, kind){ const t=$("toast"); t.textContent=msg; t.className="toast "+(kind||""); t.style.display="block"; setTimeout(()=>t.style.display="none", 2800); }
@@ -190,6 +207,8 @@
   $("loginBtn").addEventListener("click", doLogin);
   $("tokenInput").addEventListener("keydown", e=>{ if(e.key==="Enter") doLogin(); });
   $("forecastService").addEventListener("change", loadForecast);
+  $("mStart").addEventListener("change", loadMetrics);
+  $("mEnd").addEventListener("change", loadMetrics);
 
   async function doLogin(){
     const t = $("tokenInput").value.trim();
@@ -215,7 +234,36 @@
   }
 
   /* ====== DATA ====== */
-  async function refreshAll(){ await Promise.all([loadStats(), loadAppointments(), loadServices(), loadForecast()]); }
+  async function refreshAll(){ await Promise.all([loadStats(), loadAppointments(), loadServices(), loadForecast(), loadMetrics()]); }
+
+  function initMetricsDates(){
+    const end = new Date();
+    const start = new Date(end);
+    start.setDate(start.getDate() - 29);
+    $("mEnd").value = toDateString(end);
+    $("mStart").value = toDateString(start);
+  }
+
+  async function loadMetrics(){
+    const start = $("mStart").value, end = $("mEnd").value;
+    const box = $("metricsStats"), message = $("metricsMessage");
+    if(!start || !end){ message.textContent = "Selecciona un rango de fechas."; return; }
+    message.textContent = "Cargando métricas…";
+    try{
+      const params = new URLSearchParams({start_date: start, end_date: end});
+      const data = await api("/api/admin/metrics?" + params.toString());
+      box.innerHTML = `
+        <div class="stat"><div class="v">${data.appointments}</div><div class="k">Citas en el rango</div></div>
+        <div class="stat acc"><div class="v">${data.today}</div><div class="k">Citas de hoy</div></div>
+        <div class="stat ok"><div class="v">${data.week}</div><div class="k">Citas de la semana</div></div>
+        <div class="stat warn"><div class="v">${money(data.estimated_revenue)}</div><div class="k">Ingresos estimados</div></div>`;
+      message.textContent = "Los ingresos se estiman con el precio actual de cada servicio.";
+    }catch(e){
+      if(e.status===401){ logout(); return; }
+      box.innerHTML = "";
+      message.textContent = "No se pudieron cargar las métricas: " + e.message;
+    }
+  }
 
   async function loadStats(){
     try{
@@ -307,12 +355,6 @@
     end.setHours(0, 0, 0, 0);
     const start = new Date(end);
     start.setDate(start.getDate() - 89);
-    const toDateString = day => {
-      const year = day.getFullYear();
-      const month = String(day.getMonth() + 1).padStart(2, "0");
-      const date = String(day.getDate()).padStart(2, "0");
-      return `${year}-${month}-${date}`;
-    };
     const params = new URLSearchParams({
       start_date: toDateString(start),
       end_date: toDateString(end),
@@ -434,6 +476,7 @@
   function clearFilters(){ $("fStatus").value=""; $("fDate").value=""; loadAppointments(); }
 
   /* init */
+  initMetricsDates();
   if(TOKEN){ showDash(); }
 </script>
 </body>

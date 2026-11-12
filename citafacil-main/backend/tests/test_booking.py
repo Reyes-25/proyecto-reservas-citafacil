@@ -277,3 +277,51 @@ def test_forecast_filters_by_service():
     assert only_service_2[0]["count"] == 1
 
 
+# ---------- Métricas ----------
+def test_admin_metrics_for_range():
+    db = SessionLocal()
+    service = db.query(models.Service).first()
+    service_id, price = service.id, service.price
+    now = local_now()
+    start_at = now.replace(hour=10, minute=0, second=0, microsecond=0)
+    db.add(
+        models.Appointment(
+            customer_name="Cliente Métricas",
+            customer_phone="+56942916570",
+            service_id=service_id,
+            start_at=start_at,
+            end_at=start_at + timedelta(minutes=service.duration_min),
+            status=models.STATUS_PENDING,
+            notes="",
+        )
+    )
+    db.commit()
+    db.close()
+
+    today = now.date().isoformat()
+    r = client.get(
+        "/api/admin/metrics",
+        headers={"X-Admin-Token": "test-token"},
+        params={"start_date": today, "end_date": today},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json() == {
+        "start_date": today,
+        "end_date": today,
+        "appointments": 1,
+        "estimated_revenue": price,
+        "today": 1,
+        "week": 1,
+    }
+
+
+def test_admin_metrics_rejects_inverted_range():
+    r = client.get(
+        "/api/admin/metrics",
+        headers={"X-Admin-Token": "test-token"},
+        params={"start_date": "2026-11-12", "end_date": "2026-11-11"},
+    )
+    assert r.status_code == 422
+
+
+

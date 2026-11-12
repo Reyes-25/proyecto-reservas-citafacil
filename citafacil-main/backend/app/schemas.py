@@ -102,6 +102,15 @@ class StatsOut(BaseModel):
     upcoming: int
 
 
+class MetricsOut(BaseModel):
+    start_date: date
+    end_date: date
+    appointments: int
+    estimated_revenue: int
+    today: int
+    week: int
+
+
 class AppointmentHistoryPoint(BaseModel):
     date: date
     count: int

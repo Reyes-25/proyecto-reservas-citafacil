@@ -14,4 +14,4 @@
 - [x] Issue #2: Calendario dinámico
 - [x] Issue #3: Gráficos de previsión
 - [ ] Issue #4: Correo de confirmación
-- [ ] Issue #5: Panel de métricas
+- [x] Issue #5: Panel de métricas
