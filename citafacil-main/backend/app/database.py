@@ -4,7 +4,7 @@ Funciona con SQLite (local) y PostgreSQL (producción) según DATABASE_URL.
 """
 from __future__ import annotations
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from .config import settings
@@ -32,3 +32,19 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def ensure_schema() -> None:
+    """Agrega columnas nuevas a bases existentes (sin migraciones externas)."""
+    inspector = inspect(engine)
+    if "appointments" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("appointments")}
+    if "customer_email" not in columns:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE appointments "
+                    "ADD COLUMN customer_email VARCHAR(120) NOT NULL DEFAULT ''"
+                )
+            )

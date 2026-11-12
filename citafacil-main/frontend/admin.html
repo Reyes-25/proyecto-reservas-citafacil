@@ -112,8 +112,24 @@
       <div class="stats" id="stats"></div>
 
       <div class="card">
+        <h2><i class="fa-solid fa-chart-column"></i> Métricas de citas</h2>
+        <div class="toolbar">
+          <div class="field"><label for="mStart">Desde</label><input type="date" id="mStart" /></div>
+          <div class="field"><label for="mEnd">Hasta</label><input type="date" id="mEnd" /></div>
+          <button class="btn ghost sm" onclick="loadMetrics()"><i class="fa-solid fa-rotate"></i> Actualizar</button>
+        </div>
+        <div class="stats" id="metricsStats" style="margin-bottom:0"></div>
+        <div id="metricsMessage" class="forecast-message" role="status" aria-live="polite"></div>
+      </div>
+
+      <div class="card">
         <h2><i class="fa-solid fa-chart-line"></i> Demanda histórica</h2>
-        <p class="forecast-message">Citas no canceladas por día durante los últimos 30 días.</p>
+        <p class="forecast-message">Citas no canceladas por día durante los últimos 90 días.</p>
+        <div class="toolbar" style="margin:14px 0">
+          <div class="field"><label for="forecastService">Servicio</label>
+            <select id="forecastService"><option value="">Todos los servicios</option></select>
+          </div>
+        </div>
         <canvas id="forecastChart" class="forecast-chart" role="img" aria-label="Gráfico de demanda histórica de citas"></canvas>
         <div id="forecastMessage" class="forecast-message" role="status" aria-live="polite">Cargando histórico…</div>
       </div>
@@ -168,6 +184,13 @@
 
   const $ = id => document.getElementById(id);
   const money = n => "$" + (n||0).toLocaleString("es-CL");
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const toDateString = day => {
+    const year = day.getFullYear();
+    const month = String(day.getMonth() + 1).padStart(2, "0");
+    const date = String(day.getDate()).padStart(2, "0");
+    return `${year}-${month}-${date}`;
+  };
   let TOKEN = localStorage.getItem("citafacil_token") || "";
 
   function toast(msg, kind){ const t=$("toast"); t.textContent=msg; t.className="toast "+(kind||""); t.style.display="block"; setTimeout(()=>t.style.display="none", 2800); }
@@ -184,6 +207,9 @@
   /* ====== LOGIN ====== */
   $("loginBtn").addEventListener("click", doLogin);
   $("tokenInput").addEventListener("keydown", e=>{ if(e.key==="Enter") doLogin(); });
+  $("forecastService").addEventListener("change", loadForecast);
+  $("mStart").addEventListener("change", loadMetrics);
+  $("mEnd").addEventListener("change", loadMetrics);
 
   async function doLogin(){
     const t = $("tokenInput").value.trim();
@@ -209,7 +235,36 @@
   }
 
   /* ====== DATA ====== */
-  async function refreshAll(){ await Promise.all([loadStats(), loadAppointments(), loadServices(), loadForecast()]); }
+  async function refreshAll(){ await Promise.all([loadStats(), loadAppointments(), loadServices(), loadForecast(), loadMetrics()]); }
+
+  function initMetricsDates(){
+    const end = new Date();
+    const start = new Date(end);
+    start.setDate(start.getDate() - 29);
+    $("mEnd").value = toDateString(end);
+    $("mStart").value = toDateString(start);
+  }
+
+  async function loadMetrics(){
+    const start = $("mStart").value, end = $("mEnd").value;
+    const box = $("metricsStats"), message = $("metricsMessage");
+    if(!start || !end){ message.textContent = "Selecciona un rango de fechas."; return; }
+    message.textContent = "Cargando métricas…";
+    try{
+      const params = new URLSearchParams({start_date: start, end_date: end});
+      const data = await api("/api/admin/metrics?" + params.toString());
+      box.innerHTML = `
+        <div class="stat"><div class="v">${data.appointments}</div><div class="k">Citas en el rango</div></div>
+        <div class="stat acc"><div class="v">${data.today}</div><div class="k">Citas de hoy</div></div>
+        <div class="stat ok"><div class="v">${data.week}</div><div class="k">Citas de la semana</div></div>
+        <div class="stat warn"><div class="v">${money(data.estimated_revenue)}</div><div class="k">Ingresos estimados</div></div>`;
+      message.textContent = "Los ingresos se estiman con el precio actual de cada servicio.";
+    }catch(e){
+      if(e.status===401){ logout(); return; }
+      box.innerHTML = "";
+      message.textContent = "No se pudieron cargar las métricas: " + e.message;
+    }
+  }
 
   async function loadStats(){
     try{
@@ -300,18 +355,14 @@
     const end = new Date();
     end.setHours(0, 0, 0, 0);
     const start = new Date(end);
-    start.setDate(start.getDate() - 29);
-    const toDateString = day => {
-      const year = day.getFullYear();
-      const month = String(day.getMonth() + 1).padStart(2, "0");
-      const date = String(day.getDate()).padStart(2, "0");
-      return `${year}-${month}-${date}`;
-    };
+    start.setDate(start.getDate() - 89);
     const params = new URLSearchParams({
       start_date: toDateString(start),
       end_date: toDateString(end),
       granularity: "day"
     });
+    const serviceId = $("forecastService").value;
+    if(serviceId) params.set("service_id", serviceId);
 
     try{
       const data = await api("/api/admin/forecast?" + params.toString());
@@ -346,8 +397,8 @@
       list.forEach(a=>{
         const tr=document.createElement("tr");
         const svc = a.service ? a.service.name : ("#"+a.service_id);
-        tr.innerHTML = `<td class="mono">${fmtDT(a.start_at)}</td><td>${a.customer_name}</td>
-          <td class="mono">${a.customer_phone}</td><td>${svc}</td>
+        tr.innerHTML = `<td class="mono">${fmtDT(a.start_at)}</td><td>${esc(a.customer_name)}</td>
+          <td class="mono">${esc(a.customer_phone)}${a.customer_email ? `<div style="font-family:'Plus Jakarta Sans',sans-serif;color:var(--muted);font-size:.78rem">${esc(a.customer_email)}</div>` : ""}</td><td>${esc(svc)}</td>
           <td><span class="badge b-${a.status}">${STLABEL[a.status]||a.status}</span></td>
           <td><div class="actions">
             <button class="ico ok" title="Confirmar" onclick="setStatus(${a.id},'confirmed')"><i class="fa-solid fa-check"></i></button>
@@ -375,6 +426,17 @@
     const box=$("svcList");
     try{
       const list = await api("/api/admin/services");
+      const select=$("forecastService");
+      if(select){
+        const current=select.value;
+        select.innerHTML='<option value="">Todos los servicios</option>';
+        list.forEach(s=>{
+          const opt=document.createElement("option");
+          opt.value=s.id; opt.textContent=s.name;
+          select.appendChild(opt);
+        });
+        select.value=current;
+      }
       if(!list.length){ box.innerHTML='<div class="empty">Aún no hay servicios.</div>'; return; }
       box.innerHTML="";
       list.forEach(s=>{
@@ -415,6 +477,7 @@
   function clearFilters(){ $("fStatus").value=""; $("fDate").value=""; loadAppointments(); }
 
   /* init */
+  initMetricsDates();
   if(TOKEN){ showDash(); }
 </script>
 </body>

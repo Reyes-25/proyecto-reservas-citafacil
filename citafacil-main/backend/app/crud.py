@@ -49,6 +49,7 @@ def create_appointment(
     obj = models.Appointment(
         customer_name=data.customer_name.strip(),
         customer_phone=data.customer_phone,
+        customer_email=data.customer_email,
         service_id=service.id,
         start_at=data.start_at,
         end_at=end_at,
@@ -76,7 +77,11 @@ def list_appointments(
 
 
 def get_appointment_history(
-    db: Session, start_date: date, end_date: date, granularity: str = "day"
+    db: Session,
+    start_date: date,
+    end_date: date,
+    granularity: str = "day",
+    service_id: Optional[int] = None,
 ) -> list[dict[str, date | int]]:
     """Cuenta citas no canceladas agrupadas por día, semana o mes."""
     if end_date < start_date:
@@ -108,13 +113,17 @@ def get_appointment_history(
         else:
             period += timedelta(days=1)
 
+    filters = [
+        models.Appointment.status != models.STATUS_CANCELLED,
+        models.Appointment.start_at >= datetime.combine(start_date, time.min),
+        models.Appointment.start_at <= datetime.combine(end_date, time.max),
+    ]
+    if service_id is not None:
+        filters.append(models.Appointment.service_id == service_id)
+
     appointments = (
         db.query(models.Appointment.start_at)
-        .filter(
-            models.Appointment.status != models.STATUS_CANCELLED,
-            models.Appointment.start_at >= datetime.combine(start_date, time.min),
-            models.Appointment.start_at <= datetime.combine(end_date, time.max),
-        )
+        .filter(*filters)
         .all()
     )
     for (start_at,) in appointments:
@@ -161,3 +170,48 @@ def stats(db: Session) -> dict:
         "done": count(models.STATUS_DONE),
         "upcoming": upcoming,
     }
+
+
+def metrics(db: Session, start_date: date, end_date: date) -> dict:
+    """Métricas de citas e ingresos estimados para un rango de fechas."""
+    from .utils import local_now
+
+    if end_date < start_date:
+        raise ValueError("end_date debe ser igual o posterior a start_date.")
+
+    now = local_now()
+    today = now.date()
+    week_start = today - timedelta(days=today.weekday())
+    week_end = week_start + timedelta(days=6)
+
+    def count_between(first: date, last: date) -> int:
+        return (
+            db.query(models.Appointment)
+            .filter(
+                models.Appointment.status != models.STATUS_CANCELLED,
+                models.Appointment.start_at >= datetime.combine(first, time.min),
+                models.Appointment.start_at <= datetime.combine(last, time.max),
+            )
+            .count()
+        )
+
+    appointments = (
+        db.query(models.Appointment, models.Service.price)
+        .join(models.Service, models.Appointment.service_id == models.Service.id)
+        .filter(
+            models.Appointment.status != models.STATUS_CANCELLED,
+            models.Appointment.start_at >= datetime.combine(start_date, time.min),
+            models.Appointment.start_at <= datetime.combine(end_date, time.max),
+        )
+        .all()
+    )
+
+    return {
+        "start_date": start_date,
+        "end_date": end_date,
+        "appointments": len(appointments),
+        "estimated_revenue": sum(price for _, price in appointments),
+        "today": count_between(today, today),
+        "week": count_between(week_start, week_end),
+    }
+

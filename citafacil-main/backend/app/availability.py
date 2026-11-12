@@ -9,6 +9,8 @@ from . import models
 from .config import settings
 from .utils import local_now
 
+MAX_CALENDAR_DAYS = 62
+
 
 def _overlaps(a_start: datetime, a_end: datetime, b_start: datetime, b_end: datetime) -> bool:
     """True si dos intervalos [inicio, fin) se solapan."""
@@ -53,6 +55,39 @@ def generate_slots(db: Session, service: models.Service, day: date) -> list[str]
             slots.append(cursor.strftime("%H:%M"))
         cursor += step
     return slots
+
+
+def get_calendar_availability(
+    db: Session, service_id: int, start_date: date, end_date: date
+) -> dict[str, str]:
+    """Estado de disponibilidad por fecha, con ambos extremos del rango incluidos."""
+    service = (
+        db.query(models.Service)
+        .filter(models.Service.id == service_id, models.Service.active.is_(True))
+        .first()
+    )
+    if not service:
+        raise LookupError("Servicio no encontrado.")
+    if end_date < start_date:
+        raise ValueError("end_date debe ser igual o posterior a start_date.")
+    if (end_date - start_date).days > MAX_CALENDAR_DAYS:
+        raise ValueError(
+            f"El rango no puede superar los {MAX_CALENDAR_DAYS} días."
+        )
+
+    availability: dict[str, str] = {}
+    day = start_date
+    while day <= end_date:
+        if day.weekday() in settings.closed_weekdays_set:
+            status = "closed"
+        elif generate_slots(db, service, day):
+            status = "available"
+        else:
+            status = "occupied"
+        availability[day.isoformat()] = status
+        day += timedelta(days=1)
+
+    return availability
 
 
 def is_slot_free(db: Session, service: models.Service, start_at: datetime) -> bool:
