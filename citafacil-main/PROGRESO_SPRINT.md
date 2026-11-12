@@ -8,9 +8,9 @@
 | Métrica | Valor |
 |---|---|
 | Total de pasos | 22 |
-| Completados | 21 |
+| Completados | 22 |
 | En progreso | 0 |
-| Pendientes | 1 |
+| Pendientes | 0 |
 | Última actualización | 2026-11-11 |
 
 ## Pasos
@@ -38,7 +38,7 @@
 | 19 | Fase 4 | Implementar panel de métricas (Issue #5) | ✅ Completado | 2026-11-11 | `GET /api/admin/metrics`, tarjetas y filtro de fechas; `15 passed` |
 | 20 | Cierre | Actualizar README y `AI_LOG.md` final | ✅ Completado | 2026-11-11 | Issues #1, #2, #3, #4 y #5 marcados |
 | 21 | Cierre | QA final (tests + revisión manual) | ✅ Completado | 2026-11-11 | `18 passed`, JS válido y pruebas en navegador |
-| 22 | Cierre | Cerrar issues y PRs pendientes | ⏳ Pendiente | — | Requiere `gh auth login` o hacerlo desde GitHub |
+| 22 | Cierre | Cerrar issues y PRs pendientes | ✅ Completado | 2026-11-11 | PRs #6, #7, #9, #10 y #11 fusionados; issues #1–#5 cerradas |
 
 ## Registro de actividad
 
@@ -53,3 +53,4 @@
 | 2026-11-11 | Issues #1 y #4 completados | Correo en formulario, persistencia y envío SMTP en modo demo |
 | 2026-11-11 | Pendiente de cierre | Falta autenticar `gh` para fusionar PRs y cerrar issues en GitHub |
 | 2026-11-11 | QA final | `18 passed`, JS validado y flujos probados en navegador |
+| 2026-11-11 | Sprint cerrado | PRs fusionados, issues #1–#5 cerradas y `main` verificado (`f10c3aa`, `18 passed`) |
